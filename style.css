@@ -188,6 +188,15 @@ main {
   color: white !important;
   transform: rotate(-10deg) scale(1.1);
 }
+.dataset-icon-container {
+  transition: all 0.5s ease;
+}
+
+.premium-card:hover .dataset-icon-container {
+  background: var(--card-color);
+  color: white !important;
+  transform: rotate(-10deg) scale(1.1);
+}
 
 .chart-tooltip-custom {
   background: rgba(30, 41, 59, 0.95) !important;
@@ -692,6 +701,22 @@ main {
 
 .nav-item i {
   flex-shrink: 0;
+}
+@keyframes slideUpRow {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-up {
+  animation: slideUpRow 0.3s ease-out;
+}
+.dataset-table tr:nth-child(even) {
+  background-color: rgba(248, 250, 252, 0.4);
 }
 /* Monetisation Table Entry Animation */
 @keyframes slideInRow {
