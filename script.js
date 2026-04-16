@@ -407,6 +407,7 @@ function switchTab(tabId) {
         if (tabId === "retention") renderRetentionChart();
         if (tabId === "ads") renderAdDepthChart(lastData.slice(7, 12));
         if (tabId === "performance") renderFrictionChart();
+        if (tabId === "dataset") renderDatasetTable();
       });
     });
   }
@@ -723,7 +724,8 @@ function updateDashboardUI(data) {
   lastData = data;
 
   // Reconstruct Tab Layouts from placeholders to active containers
-  document.getElementById("view-overview").className = "tab-view space-y-8";
+  document.getElementById("view-overview").className =
+    "tab-view hidden space-y-8";
   document.getElementById("view-overview").innerHTML =
     `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="kpi-cards-container"></div>`;
 
@@ -787,6 +789,15 @@ function updateDashboardUI(data) {
       <div class="h-[380px] chart-container-stable"><canvas id="frictionChart"></canvas></div>
     </div>`;
 
+  document.getElementById("view-dataset").className = "tab-view hidden";
+  document.getElementById("view-dataset").innerHTML = `
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 px-2">
+          <div>
+            <h4 class="text-2xl font-black text-slate-900 tracking-tight">Consolidated Dataset</h4>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Categorized Metric Ledger</p>
+          </div>
+        </div>
+        <div id="dataset-container" class="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6"></div>`;
   const overviewContainer = document.getElementById("kpi-cards-container");
   const retentionContainer = document.getElementById(
     "retention-cards-container",
@@ -948,13 +959,111 @@ function updateDashboardUI(data) {
     performanceCards.map((c, i) => generateCard(c, i)).join("");
 
   const activeTab = document.querySelector(".tab-btn.active").dataset.tab;
-
-  // Render the current tab immediately; others will render when clicked via switchTab
-  if (activeTab === "retention") renderRetentionChart();
-  if (activeTab === "ads") renderAdDepthChart(data.slice(7, 12));
-  if (activeTab === "performance") renderFrictionChart();
+  switchTab(activeTab);
 }
 
+function renderDatasetTable() {
+  if (!lastData) return;
+  const container = document.getElementById("dataset-container");
+  if (!container) return;
+
+  const formatNum = (val) => val.toLocaleString();
+  const formatPct = (val) => val.toFixed(2) + "%";
+  const formatDec = (val) => val.toFixed(2);
+  const formatSec = (val) => val.toFixed(1);
+
+  const tailwindColors = {
+    blue: { hex: "#3b82f6", glass: "rgba(59, 130, 246, 0.08)" },
+    violet: { hex: "#8b5cf6", glass: "rgba(139, 92, 246, 0.08)" },
+    emerald: { hex: "#10b981", glass: "rgba(16, 185, 129, 0.08)" },
+    rose: { hex: "#f43f5e", glass: "rgba(244, 63, 94, 0.08)" },
+    orange: { hex: "#f97316", glass: "rgba(249, 115, 22, 0.08)" },
+  };
+
+  const categories = [
+    {
+      title: "Core Funnel",
+      icon: "fa-rocket",
+      color: "blue",
+      metrics: [
+        { label: "Total Installs", val: formatNum(lastData[0]) },
+        { label: "Install to Onboard %", val: formatPct(lastData[20]) },
+      ],
+    },
+    {
+      title: "Level Progression",
+      icon: "fa-stairs",
+      color: "violet",
+      metrics: [
+        { label: "Lvl 20 Reach %", val: formatPct(lastData[1]) },
+        { label: "Lvl 50 Reach %", val: formatPct(lastData[2]) },
+        { label: "Lvl 70 Reach %", val: formatPct(lastData[3]) },
+        { label: "Lvl 100 Reach %", val: formatPct(lastData[4]) },
+        { label: "Lvl 150 Reach %", val: formatPct(lastData[5]) },
+        { label: "Lvl 200 Reach %", val: formatPct(lastData[6]) },
+      ],
+    },
+    {
+      title: "Monetization Systems",
+      icon: "fa-rectangle-ad",
+      color: "emerald",
+      metrics: [
+        { label: "Ads 10 Reach %", val: formatPct(lastData[7]) },
+        { label: "Ads 20 Reach %", val: formatPct(lastData[8]) },
+        { label: "Ads 40 Reach %", val: formatPct(lastData[9]) },
+        { label: "Ads 70 Reach %", val: formatPct(lastData[10]) },
+        { label: "Ads 100 Reach %", val: formatPct(lastData[11]) },
+        { label: "Avg Ad per user", val: formatDec(lastData[12]) },
+        { label: "User Ad Failure Rate", val: formatPct(lastData[25]) },
+        { label: "Ad Request Failure %", val: formatPct(lastData[26]) },
+      ],
+    },
+    {
+      title: "Engagement & Quality",
+      icon: "fa-stopwatch",
+      color: "rose",
+      metrics: [
+        { label: "Avg. Session Length (sec)", val: formatSec(lastData[21]) },
+        { label: "Avg. Playtime (sec)", val: formatSec(lastData[22]) },
+        { label: "D1 Retention", val: formatPct(lastData[23]) },
+        { label: "D3 Retention", val: formatPct(lastData[24]) },
+      ],
+    },
+    {
+      title: "Revenue Health",
+      icon: "fa-funnel-dollar",
+      color: "orange",
+      metrics: [{ label: "ROAS", val: formatPct(lastData[27]) }],
+    },
+  ];
+
+  container.innerHTML = categories
+    .map(
+      (cat, i) => `
+    <div class="premium-card p-6 break-inside-avoid mb-6" style="--card-color: ${tailwindColors[cat.color].hex}; --card-tint: ${tailwindColors[cat.color].glass}; animation: slideUpRow 0.4s ease-out forwards; animation-delay: ${i * 80}ms; opacity: 0;">
+      <div class="flex items-center gap-4 mb-5 pb-4 border-b border-slate-100/50">
+        <div class="dataset-icon-container w-10 h-10 rounded-[10px] bg-white border border-slate-100 shadow-sm flex items-center justify-center" style="color: var(--card-color)">
+          <i class="fas ${cat.icon} text-base"></i>
+        </div>
+        <h5 class="text-[11px] font-black text-slate-800 uppercase tracking-[0.15em]">${cat.title}</h5>
+      </div>
+      <div class="space-y-1">
+        ${cat.metrics
+          .map(
+            (m) => `
+          <div class="flex justify-between items-center px-1 py-2 rounded-lg hover:bg-slate-50/50 transition-colors group">
+            <span class="text-[11px] font-bold text-slate-500 group-hover:text-slate-800 transition-colors">${m.label}</span>
+            <span class="text-[12px] font-black text-slate-800 tabular-nums bg-white border border-slate-100/60 shadow-sm px-2.5 py-1 rounded-md group-hover:border-slate-300 transition-colors">${m.val}</span>
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `,
+    )
+    .join("");
+}
 function toggleRetentionMode(mode) {
   retentionChartMode = mode;
   const instBtn = document.getElementById("btn-ret-install");
