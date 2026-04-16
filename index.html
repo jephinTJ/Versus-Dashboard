@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Versus Dashboard | Version Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="min-h-screen antialiased">
+    <nav
+      class="bg-white border-b border-slate-200 sticky top-0 z-[130] px-8 flex justify-between items-center shadow-sm h-[74px]"
+    >
+      <div class="flex items-center gap-4 w-[380px] shrink-0">
+        <div class="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+          <i class="fas fa-layer-group text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight uppercase leading-none flex items-center">
+            Versus&nbsp;<span class="text-blue-600">Dashboard</span><span id="title-pro" class="opacity-0 -translate-x-2 w-0 overflow-hidden text-red-700 ml-1.5 transition-all duration-500 ease-out pointer-events-none">PRO</span>
+          </h1>
+          <span class="text-[10px] text-slate-500 font-semibold tracking-widest uppercase">Version Insights Tool</span>
+        </div>
+      </div>
+
+      <div class="flex-1 flex justify-center items-center overflow-visible">
+        <div id="single-nav-controls" class="flex items-center gap-3">
+          <div class="relative group" id="nav-game-switcher">
+              <button
+                id="btn-base-game"
+                onclick="toggleDropdown('nav-dropdown')"
+                class="flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl hover:bg-white hover:border-blue-400 transition-all shadow-sm"
+              >
+                <img
+                  id="nav-current-icon"
+                  src="https://via.placeholder.com/32"
+                  class="w-6 h-6 rounded-lg object-cover border border-slate-100 hidden"
+                />
+                <div class="text-left">
+                  <p
+                    class="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter leading-none mb-0.5"
+                  >
+                    Game Switch
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <span
+                      id="nav-current-game"
+                      class="text-xs font-bold text-slate-700"
+                      >Select Game</span
+                    >
+                    <i
+                      class="fas fa-chevron-down text-[10px] text-slate-400"
+                    ></i>
+                  </div>
+                </div>
+              </button>
+              <div
+                id="nav-dropdown"
+                class="dropdown-content hidden absolute top-full left-0 mt-2 w-72 bg-white border border-slate-100 rounded-2xl shadow-2xl p-3 z-[110]"
+              >
+                <div class="p-2 mb-2 border-b border-slate-50">
+                  <input
+                    type="text"
+                    id="nav-search"
+                    placeholder="Search games..."
+                    class="w-full text-xs p-2 bg-slate-50 rounded-lg outline-none focus:ring-1 focus:ring-blue-400"
+                    oninput="filterNavGames()"
+                  />
+                </div>
+                <div
+  id="nav-game-list"
+  class="max-h-64 overflow-y-auto pr-1 custom-scrollbar"
+></div>
+              </div>
+            </div>
+
+            <div class="relative group" id="nav-version-switcher">
+              <button
+                id="btn-base-version"
+                onclick="toggleDropdown('nav-version-dropdown')"
+                disabled
+                class="flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl hover:bg-white hover:border-blue-400 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div class="text-left">
+                  <p
+                    class="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter leading-none mb-0.5"
+                  >
+                    Active Version
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <span
+                      id="nav-current-version"
+                      class="text-xs font-bold text-slate-700"
+                      >None Selected</span
+                    >
+                    <i
+                      class="fas fa-chevron-down text-[10px] text-slate-400"
+                    ></i>
+                  </div>
+                </div>
+              </button>
+              <div
+                id="nav-version-dropdown"
+                class="dropdown-content hidden absolute top-full left-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl p-3 z-[110]"
+              >
+                <div class="p-2 mb-2 border-b border-slate-50">
+                  <input
+                    type="text"
+                    id="nav-version-search"
+                    placeholder="Search versions..."
+                    class="w-full text-xs p-2 bg-slate-50 rounded-lg outline-none focus:ring-1 focus:ring-blue-400"
+                    oninput="filterNavVersions()"
+                  />
+                </div>
+                <div
+                  id="nav-version-list"
+                  class="space-y-1 max-h-64 overflow-y-auto pr-1 custom-scrollbar selection-grid-view"
+                ></div>
+              </div>
+            </div>
+
+            <div class="relative group" id="nav-day-switcher">
+              <button
+                id="btn-base-day"
+                onclick="toggleDropdown('nav-day-dropdown')"
+                class="flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl hover:bg-white hover:border-blue-400 transition-all shadow-sm"
+              >
+                <div class="text-left">
+                  <p
+                    class="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter leading-none mb-0.5"
+                  >
+                    Active Day
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <span
+                      id="nav-current-day"
+                      class="text-xs font-bold text-slate-700"
+                      >Day 0</span
+                    >
+                    <i
+                      class="fas fa-chevron-down text-[10px] text-slate-400"
+                    ></i>
+                  </div>
+                </div>
+              </button>
+              <div
+                id="nav-day-dropdown"
+                class="dropdown-content hidden absolute top-full left-0 mt-2 w-56 bg-white border border-slate-100 rounded-2xl shadow-2xl p-3 z-[110]"
+              >
+                <div id="nav-day-list" class="selection-grid-view gap-2">
+                  <button
+                    class="list-item text-xs"
+                    onclick="
+                      pickOption('DAY', 'D0', 'base');
+                      toggleDropdown('nav-day-dropdown');
+                    "
+                  >
+                    D0
+                  </button>
+                  <button
+                    class="list-item text-xs"
+                    onclick="
+                      pickOption('DAY', 'D7', 'base');
+                      toggleDropdown('nav-day-dropdown');
+                    "
+                  >
+                    D7
+                  </button>
+                  <button
+                    class="list-item text-xs"
+                    onclick="
+                      pickOption('DAY', 'D30', 'base');
+                      toggleDropdown('nav-day-dropdown');
+                    "
+                  >
+                    D30
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="compare-nav-controls" class="hidden relative flex justify-center">
+            <button
+              onclick="toggleDropdown('comp-engine-dropdown')"
+              class="engine-premium-btn flex items-center gap-5 px-5 py-2 rounded-2xl transition-all group"
+            >
+              <span class="text-[15px] font-bold text-white tracking-tight">Comparison Engine</span>
+              <div class="h-5 w-[1px] bg-slate-700/60 mx-1"></div>
+              <span id="comp-slots-count" class="engine-count-badge">0 Active</span>
+              <i class="fas fa-chevron-down text-[10px] text-slate-400 group-hover:text-white transition-colors"></i>
+            </button>
+
+            <div
+              id="comp-engine-dropdown"
+              class="dropdown-content hidden absolute top-full left-1/2 -translate-x-1/2 mt-5 w-[760px] bg-white border border-slate-100 rounded-[2.5rem] shadow-[0_30px_100px_-20px_rgba(0,0,0,0.15)] p-10 z-[120] animate-dropdown"
+            >
+              <div class="flex justify-between items-center mb-8 px-2">
+                <h4
+                  class="text-sm font-black uppercase tracking-[0.2em] text-slate-400"
+                >
+                  Data Selection Layers
+                </h4>
+                <span
+                  class="bg-blue-50 text-blue-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest"
+                  >Multi-View Sync</span
+                >
+              </div>
+
+              <div id="comp-slots-container" class="space-y-6 mb-10"></div>
+
+              <div id="add-slot-container" class="flex justify-center border-t border-slate-50 pt-8">
+                <button
+                  onclick="addNewSlot()"
+                  class="w-14 h-14 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 transition-all flex items-center justify-center group shadow-sm"
+                >
+                  <i
+                    class="fas fa-plus text-lg group-hover:scale-110 transition-transform"
+                  ></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4 w-[380px] justify-end shrink-0">
+        <div id="single-mode-actions" class="flex items-center gap-4">
+          <button
+            onclick="document.getElementById('upload-modal').classList.remove('hidden')"
+            class="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-2 whitespace-nowrap"
+          >
+            <i class="fas fa-plus-circle text-xs"></i> Inject KPI Data
+          </button>
+          <button
+            onclick="saveToDatabase()"
+            class="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center gap-2 whitespace-nowrap"
+          >
+            <i class="fas fa-database"></i> Save to DB
+          </button>
+        </div>
+
+        <div class="flex items-center bg-slate-100 p-1 rounded-xl gap-1 mr-4">
+          <button
+            id="mode-single"
+            onclick="setDashboardMode('single')"
+            class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all bg-white shadow-sm text-blue-600"
+          >
+            Single
+          </button>
+          <button
+            id="mode-compare"
+            onclick="setDashboardMode('compare')"
+            class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-slate-500 hover:text-slate-700"
+          >
+            Compare
+          </button>
+        </div>
+        <div class="h-8 w-[1px] bg-slate-200"></div>
+      </div>
+    </nav>
+
+    <main class="flex min-h-[calc(100vh-73.5px)] relative overflow-hidden">
+      <section id="dashboard-content" class="flex-1 p-8 bg-slate-50/50">
+        <div
+          id="game-header"
+          class="hidden mb-10 p-2 border-b border-slate-100 pb-8"
+        >
+          <div class="flex items-start gap-6">
+            <img
+              id="header-app-icon"
+              src=""
+              alt="App Icon"
+              class="w-24 h-24 rounded-[1.5rem] shadow-xl border border-slate-100 object-cover"
+            />
+            <div class="space-y-2">
+              <div class="flex items-center gap-3">
+                <h2
+                  id="header-game-name"
+                  class="text-3xl font-bold text-slate-900 tracking-tight"
+                ></h2>
+                <div class="flex gap-2 text-lg">
+                  <i
+                    id="header-platform-android"
+                    class="fab fa-android text-emerald-500 hidden"
+                  ></i>
+                  <i
+                    id="header-platform-ios"
+                    class="fab fa-apple text-slate-400 hidden"
+                  ></i>
+                </div>
+              </div>
+              <p
+                id="header-package-name"
+                class="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider opacity-60"
+              ></p>
+              <div id="header-tags" class="flex gap-2"></div>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-10 border-b border-slate-100 mb-10">
+          <button
+            onclick="switchTab('overview')"
+            class="tab-btn active"
+            data-tab="overview"
+            data-text="Overview"
+          >
+            Overview
+          </button>
+          <button
+            onclick="switchTab('ads')"
+            class="tab-btn"
+            data-tab="ads"
+            data-text="Revenue System"
+          >
+            Revenue System
+          </button>
+          <button
+            onclick="switchTab('performance')"
+            class="tab-btn"
+            data-tab="performance"
+            data-text="Performance"
+          >
+            Performance
+          </button>
+          <button
+            onclick="switchTab('retention')"
+            class="tab-btn"
+            data-tab="retention"
+            data-text="Retention"
+          >
+            Retention
+          </button>
+        </div>
+
+        <div
+          id="view-overview"
+          class="tab-view min-h-[400px] flex items-center justify-center"
+        >
+          <p class="text-slate-400 font-medium italic">
+            Select a Game and Version to view primary growth KPIs and retention
+            health.
+          </p>
+        </div>
+
+        <div
+          id="view-retention"
+          class="tab-view hidden min-h-[400px] flex items-center justify-center"
+        >
+          <p class="text-slate-400 font-medium italic">
+            Select a Game and Version to track user drop-off progression across
+            levels.
+          </p>
+        </div>
+
+        <div
+          id="view-ads"
+          class="tab-view hidden min-h-[400px] flex items-center justify-center"
+        >
+          <p class="text-slate-400 font-medium italic">
+            Select a Game and Version to analyze ad-watching behavior and
+            revenue milestones.
+          </p>
+        </div>
+
+        <div
+          id="view-performance"
+          class="tab-view hidden min-h-[400px] flex items-center justify-center"
+        >
+          <p class="text-slate-400 font-medium italic">
+            Select a Game and Version to pinpoint level-based churn and gameplay
+            bottlenecks.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <div id="upload-modal" class="hidden fixed inset-0 z-[160] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
+      <div
+        class="bg-white w-full max-w-xl p-10 rounded-[2rem] shadow-2xl relative"
+      >
+        <button
+          onclick="
+            document.getElementById('upload-modal').classList.add('hidden')
+          "
+          class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          <i class="fas fa-times text-xl"></i>
+        </button>
+
+        <div class="text-center mb-8">
+          <h2 class="text-2xl font-bold mb-2">Sync Version Data</h2>
+          <p class="text-slate-500 text-sm">
+            Paste the row from your VP1 Python Script to update the database.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4 mb-8">
+          <button
+            id="btn-select-game"
+            onclick="openSelection('GAME')"
+            class="status-btn empty"
+          >
+            <i class="fas fa-gamepad"></i> <span>Select Game</span>
+          </button>
+          <div class="tooltip-container">
+            <button
+              id="btn-select-version"
+              onclick="openSelection('VERSION')"
+              class="status-btn empty w-full"
+              disabled
+            >
+              <i class="fas fa-code-branch"></i> <span>Select Version</span>
+            </button>
+            <span class="tooltip-text">Select a game first</span>
+          </div>
+          <button
+            id="btn-select-day"
+            onclick="openSelection('DAY')"
+            class="status-btn empty"
+          >
+            <i class="fas fa-calendar-day"></i> <span>Select Day</span>
+          </button>
+        </div>
+
+        <textarea
+          id="inject-textarea"
+          placeholder="Paste 28 KPI row here..."
+          class="w-full h-32 bg-slate-50 border border-slate-200 rounded-2xl p-4 font-mono text-xs focus:ring-2 focus:ring-blue-500 outline-none mb-6"
+        ></textarea>
+
+        <div class="tooltip-container">
+          <button
+            id="inject-btn"
+            onclick="previewData()"
+            disabled
+            class="w-full bg-slate-200 text-slate-400 py-4 rounded-xl font-bold uppercase tracking-widest transition-all"
+          >
+            Add to Dashboard Preview
+          </button>
+          <span class="tooltip-text"
+            >Fill out missing filters and paste data</span
+          >
+        </div>
+      </div>
+    </div>
+    <div id="input-modal" class="hidden fixed inset-0 z-[180] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+      <div
+        class="bg-white w-full max-w-sm p-8 rounded-[2rem] shadow-2xl relative"
+      >
+        <h3 id="input-modal-title" class="text-xl font-bold mb-2">
+          Add New Game
+        </h3>
+        <p id="input-modal-desc" class="text-slate-500 text-sm mb-6">
+          Enter the name below to add it to your dashboard.
+        </p>
+
+        <input
+          type="text"
+          id="custom-input-field"
+          placeholder="Enter name..."
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none mb-8"
+        />
+
+        <div class="flex gap-3">
+          <button
+            onclick="closeInputModal()"
+            class="flex-1 px-4 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-50 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onclick="submitInputModal()"
+            class="flex-1 bg-slate-900 text-white px-4 py-3 rounded-xl font-bold hover:bg-blue-600 transition-all shadow-lg"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
+      id="inject-success-modal"
+      class="hidden fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white w-full max-w-sm p-12 rounded-[2.5rem] shadow-2xl text-center"
+      >
+        <div
+          class="w-24 h-24 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-8 text-5xl animate-success-stretched"
+        >
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-800 tracking-tight">
+          Added to Dashboard Preview
+        </h3>
+      </div>
+    </div>
+    <script src="script.js"></script>
+    <div id="selection-modal" class="hidden fixed inset-0 z-[170] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+      <div
+        class="bg-white w-full max-w-sm p-8 rounded-[2rem] shadow-2xl flex flex-col max-h-[80vh]"
+      >
+        <div class="flex justify-between items-center mb-6">
+          <h3 id="selection-title" class="text-xl font-bold">Select Game</h3>
+          <button
+            onclick="closeSelection()"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div
+          id="selection-list"
+          class="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar"
+        ></div>
+
+        <button
+          id="selection-add-btn"
+          class="mt-6 w-full border-2 border-dashed border-slate-200 text-slate-400 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+        >
+          <i class="fas fa-plus"></i> Add New
+        </button>
+      </div>
+    </div>
+    <div id="confirm-modal" class="hidden fixed inset-0 z-[160] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+      <div
+        class="bg-white w-full max-w-sm p-8 rounded-[2rem] shadow-2xl text-center"
+      >
+        <div
+          class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl"
+        >
+          <i class="fas fa-cloud-upload-alt"></i>
+        </div>
+        <h3 class="text-xl font-bold mb-2">Push to Database?</h3>
+        <p class="text-slate-500 text-sm mb-8">
+          This will sync your current dashboard preview to the live SQL Server.
+        </p>
+
+        <div class="flex gap-3">
+          <button
+            onclick="
+              document.getElementById('confirm-modal').classList.add('hidden')
+            "
+            class="flex-1 bg-slate-100 px-4 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onclick="executeDummyPush(event)"
+            class="flex-1 bg-blue-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
+      id="success-modal"
+      class="hidden fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white w-full max-w-sm p-10 rounded-[2.5rem] shadow-2xl text-center"
+      >
+        <div
+          class="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl animate-success"
+        >
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h3 class="text-xl font-bold mb-2">Pushed to Database</h3>
+        <p
+          class="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-6"
+        >
+          Synchronization Successful
+        </p>
+
+        <div
+          class="bg-slate-50 rounded-2xl p-4 mb-8 flex flex-col items-center justify-center border border-slate-100"
+        >
+          <p
+            id="success-details"
+            class="text-slate-800 text-[11px] font-black uppercase tracking-wider"
+          ></p>
+        </div>
+
+        <button
+          onclick="
+            document.getElementById('success-modal').classList.add('hidden')
+          "
+          class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-blue-600 transition-all shadow-lg shadow-blue-100"
+        >
+          Great!
+        </button>
+      </div>
+    </div>
+  </body>
+</html>
