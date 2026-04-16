@@ -1,2 +1,1 @@
-# Versus-Dashboard
-## [View](https://jephintj.github.io/Versus-Dashboard/)
+# [Versus-Dashboard](https://jephintj.github.io/Versus-Dashboard/)
