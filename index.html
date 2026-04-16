@@ -344,6 +344,14 @@
           >
             Retention
           </button>
+          <button
+            onclick="switchTab('dataset')"
+            class="tab-btn"
+            data-tab="dataset"
+            data-text="Dataset"
+          >
+            Dataset
+          </button>
         </div>
 
         <div
@@ -383,6 +391,14 @@
           <p class="text-slate-400 font-medium italic">
             Select a Game and Version to pinpoint level-based churn and gameplay
             bottlenecks.
+          </p>
+        </div>
+        <div
+          id="view-dataset"
+          class="tab-view hidden min-h-[400px] flex items-center justify-center"
+        >
+          <p class="text-slate-400 font-medium italic">
+            Select a Game and Version to view the consolidated raw metrics.
           </p>
         </div>
       </section>
