@@ -106,6 +106,7 @@ let dashboardMode = "single";
 let retentionChartMode = "install";
 let performanceMode = "impact"; // 'impact' or 'efficiency'
 let lastData = null;
+let lastCompLayers = null;
 let activeInjection = { game: null, version: null, day: null };
 let baseSelection = { game: null, version: null, day: null };
 let compSelection = { game: null, version: null, day: null };
@@ -405,7 +406,7 @@ function switchTab(tabId) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (tabId === "retention") renderRetentionChart();
-        if (tabId === "ads") renderAdDepthChart(lastData.slice(7, 12));
+        if (tabId === "ads") renderAdDepthChart();
         if (tabId === "performance") renderFrictionChart();
         if (tabId === "dataset") renderDatasetTable();
       });
@@ -528,9 +529,54 @@ function pickOption(type, value, context = "inject") {
   refreshDashboard();
 }
 
+function updateCompareHeader(activeSlots) {
+  const header = document.getElementById("compare-header");
+  if (!header) return;
+
+  const slotLetters = ["A", "B", "C", "D"];
+
+  header.innerHTML = activeSlots
+    .map((s, i) => {
+      const data = STUDIO_GAMES[s.game];
+      const icon = data ? data.icon : "https://via.placeholder.com/32";
+      const fullName = s.game.replace(/\s*ios\s*$/i, "");
+      const formattedDay = s.day.replace("D", "Day ");
+      const crownHTML =
+        i === 0
+          ? `<i class="fas fa-crown absolute -top-5 -left-3 text-amber-400 text-xl drop-shadow-md -rotate-12 z-10"></i>`
+          : "";
+
+      return `
+      <div class="flex-1 flex items-center gap-3 px-4 first:pl-0 min-w-0">
+        <span class="text-4xl font-black text-slate-900 pr-4 border-r border-slate-200 leading-none">${slotLetters[i]}</span>
+        <div class="relative shrink-0 ml-1">
+          ${crownHTML}
+          <img src="${icon}" class="w-12 h-12 rounded-xl object-cover shadow-sm border border-slate-100 relative z-0" />
+        </div>
+        <div class="flex flex-col items-start min-w-0 w-full justify-center">
+          <span class="text-sm font-black text-slate-800 leading-none mb-1.5 truncate w-full">${fullName}</span>
+          <div class="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 tracking-widest shrink-0">
+            <span class="bg-slate-100/80 px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 normal-case">v${s.version}</span>
+            <span class="bg-slate-100/80 px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 uppercase">${formattedDay}</span>
+          </div>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+
+  header.className =
+    "mb-10 pb-6 border-b border-slate-100 flex w-full items-center justify-between";
+}
+
 function refreshDashboard() {
   const gameHeader = document.getElementById("game-header");
+  const compareHeader = document.getElementById("compare-header");
+
   if (dashboardMode === "single") {
+    compareHeader?.classList.add("hidden");
+    compareHeader?.classList.remove("flex");
+
     const g = baseSelection.game,
       v = baseSelection.version,
       d = baseSelection.day || "D0";
@@ -543,16 +589,23 @@ function refreshDashboard() {
   } else {
     gameHeader?.classList.add("hidden");
     const activeSlots = selectionSlots.filter((s) => s.game && s.version);
+
+    if (activeSlots.length > 0) updateCompareHeader(activeSlots);
+
     if (activeSlots.length < 2) return;
-    const baseData =
-      MOCK_DATABASE[
-        `${activeSlots[0].game}_${activeSlots[0].version}_${activeSlots[0].day}`
-      ];
-    const compData =
-      MOCK_DATABASE[
-        `${activeSlots[1].game}_${activeSlots[1].version}_${activeSlots[1].day}`
-      ];
-    if (baseData) updateDashboardUI(baseData, compData);
+
+    const datasets = activeSlots
+      .map((s) => ({
+        meta: s,
+        data: MOCK_DATABASE[`${s.game}_${s.version}_${s.day}`],
+      }))
+      .filter((item) => item.data);
+
+    if (datasets.length >= 2) {
+      updateDashboardUI(datasets[0].data, datasets.slice(1));
+    } else if (datasets.length === 1) {
+      updateDashboardUI(datasets[0].data);
+    }
   }
 }
 function updateGameHeader(gameName) {
@@ -720,8 +773,154 @@ function finalizeInjection() {
   document.getElementById("inject-success-modal").classList.add("hidden");
 }
 
-function updateDashboardUI(data) {
+const formatTime = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}m ${s}s`;
+};
+
+const tailwindColors = {
+  blue: { hex: "#3b82f6", glass: "rgba(59, 130, 246, 0.12)" },
+  orange: { hex: "#f97316", glass: "rgba(249, 115, 22, 0.12)" },
+  emerald: { hex: "#10b981", glass: "rgba(16, 185, 129, 0.12)" },
+  violet: { hex: "#8b5cf6", glass: "rgba(139, 92, 246, 0.12)" },
+  indigo: { hex: "#6366f1", glass: "rgba(99, 102, 241, 0.12)" },
+  rose: { hex: "#f43f5e", glass: "rgba(244, 63, 94, 0.12)" },
+};
+function getLayerLabel(index) {
+  if (dashboardMode !== "compare")
+    return `LAYER ${["A", "B", "C", "D"][index]}`;
+  const activeSlots = selectionSlots.filter((s) => s.game && s.version);
+  if (index >= activeSlots.length)
+    return `LAYER ${["A", "B", "C", "D"][index]}`;
+  const slot = activeSlots[index];
+  const shortName = (
+    STUDIO_GAMES[slot.game]?.shortName ||
+    slot.game.replace(/\s*ios\s*$/i, "").substring(0, 6)
+  ).toUpperCase();
+  return `${shortName} (v${slot.version} , ${slot.day})`;
+}
+const generateCard = (c, i, customId = "") => `
+  <div ${customId ? `id="${customId}"` : ""} class="premium-card p-7 group" style="--card-color: ${tailwindColors[c.color].hex}; --card-tint: ${tailwindColors[c.color].glass}; animation-delay: ${i * 80}ms">
+    <div class="card-content-wrapper transition-all duration-200">
+      <div class="flex justify-between items-center mb-10">
+        <div class="card-icon-container w-14 h-14 bg-white text-${c.color}-600 rounded-2xl text-xl shadow-sm border border-slate-50">
+          ${c.icon.startsWith("<") ? c.icon : `<i class="fas ${c.icon}"></i>`}
+        </div>
+        <div class="flex flex-col items-end">
+           <span class="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em]">Data Source</span>
+           <div class="flex items-center gap-1.5 mt-1">
+             <div class="pulse-dot w-1.5 h-1.5 rounded-full bg-${c.color}-500 animate-pulse"></div>
+             <span class="synced-text text-[8px] font-bold text-${c.color}-600 uppercase">Synced</span>
+           </div>
+        </div>
+      </div>
+      <p class="card-label text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-2 group-hover:text-slate-600 transition-colors">${c.label}</p>
+      <div class="flex items-baseline">
+        <h3 class="card-value text-4xl font-extrabold text-slate-800 tracking-tighter">${c.val}</h3>
+      </div>
+    </div>
+  </div>`;
+
+const formatCValue = (val, idx) => {
+  if (idx === 0) return val.toLocaleString();
+  if (
+    idx === 27 ||
+    idx === 20 ||
+    idx === 23 ||
+    idx === 24 ||
+    idx === 25 ||
+    idx === 26
+  )
+    return val.toFixed(2) + "%";
+  if (idx === 12) return val.toFixed(2);
+  if (idx === 22 || idx === 21) return formatTime(val);
+  return val;
+};
+
+const generateOverviewCard = (c, i, compLayers, customId = "") => {
+  if (dashboardMode === "single" || !compLayers || compLayers.length === 0) {
+    return generateCard(c, i, customId);
+  }
+
+  const baseRaw = c.rawVal;
+  const slotLetters = ["B", "C", "D"];
+
+  const rowsHTML = compLayers
+    .map((layer, idx) => {
+      const compRaw = layer.data[c.index];
+      const compValStr = formatCValue(compRaw, c.index);
+      const isAbs = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 23, 24,
+        25, 26, 27,
+      ].includes(c.index);
+      let delta = 0;
+      let deltaStr = "";
+
+      if (isAbs) {
+        delta = compRaw - baseRaw;
+        deltaStr =
+          delta > 0 ? `+${delta.toFixed(2)}pp` : `${delta.toFixed(2)}pp`;
+      } else {
+        delta =
+          baseRaw === 0
+            ? compRaw > 0
+              ? 100
+              : 0
+            : ((compRaw - baseRaw) / baseRaw) * 100;
+        deltaStr = delta > 0 ? `+${delta.toFixed(2)}%` : `${delta.toFixed(2)}%`;
+      }
+
+      let isPositive = c.invertDelta ? delta <= 0 : delta >= 0;
+
+      const dColorStyle = isPositive
+        ? "bg-emerald-500 text-white border border-emerald-600"
+        : "bg-rose-500 text-white border border-rose-600";
+
+      return `
+                    <div class="py-2.5 border-b border-slate-200/50 last:border-0 last:pb-0 first:pt-0 flex flex-col justify-center">
+                      <span class="text-[10px] font-bold tracking-widest text-slate-400 mb-1.5 leading-[1.1]">${getLayerLabel(idx + 1)}</span>
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-[24px] font-black text-slate-800 tabular-nums leading-none tracking-tight">${compValStr}</span>
+                <span class="px-3 py-1 rounded-full text-[13px] font-black ${dColorStyle} shadow-sm whitespace-nowrap tracking-tight leading-none">${deltaStr}</span>
+              </div>
+            </div>`;
+    })
+    .join("");
+
+  return `
+        <div ${customId ? `id="${customId}"` : ""} class="premium-card p-5 group flex flex-col justify-between" style="--card-color: ${tailwindColors[c.color].hex}; --card-tint: ${tailwindColors[c.color].glass}; animation-delay: ${i * 80}ms">
+          <div class="flex items-center justify-between mb-4">
+             <div class="flex items-center gap-3">
+                 <div class="overview-icon-container w-11 h-11 rounded-[12px] bg-white text-${c.color}-500 flex items-center justify-center text-lg shadow-sm border border-slate-100">
+                     ${c.icon.startsWith("<") ? c.icon : `<i class="fas ${c.icon}"></i>`}
+                 </div>
+                 <h4 class="text-[14px] font-black text-slate-800 uppercase tracking-widest leading-none">${c.label}</h4>
+             </div>
+             <div class="flex items-center gap-1.5">
+                 <div class="w-1.5 h-1.5 rounded-full bg-${c.color}-500 animate-pulse"></div>
+                 <span class="text-[9px] font-bold text-${c.color}-600 uppercase tracking-widest">Synced</span>
+             </div>
+          </div>
+
+          <div class="flex flex-row items-stretch h-full gap-5 mt-1">
+             <div class="flex-1 flex flex-col justify-center">
+                 <p class="text-[10px] font-bold tracking-widest text-slate-400 mb-2 leading-[1.1]">${getLayerLabel(0)}</p>
+                 <h3 class="text-[40px] font-black text-${c.color}-500 tracking-tighter drop-shadow-sm leading-none">${c.val}</h3>
+             </div>
+             
+             <div class="w-px bg-slate-200/80 my-2"></div>
+             
+             <div class="flex-[1.2] flex flex-col justify-center min-w-[150px]">
+                ${rowsHTML}
+             </div>
+          </div>
+        </div>`;
+};
+
+function updateDashboardUI(data, compLayers = null) {
   lastData = data;
+  lastCompLayers = compLayers;
 
   // Reconstruct Tab Layouts from placeholders to active containers
   document.getElementById("view-overview").className =
@@ -738,8 +937,8 @@ function updateDashboardUI(data) {
         <div><h4 class="text-lg font-bold text-slate-800">Retention Progression</h4><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Level-based User Drop-off</p></div>
         <div class="flex items-center gap-4">
           <div class="flex bg-slate-100 p-1 rounded-xl gap-1">
-            <button onclick="toggleRetentionMode('install')" id="btn-ret-install" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all bg-white shadow-sm text-blue-600">Vs Install</button>
-            <button onclick="toggleRetentionMode('onboard')" id="btn-ret-onboard" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-slate-500 hover:text-slate-700">Vs Onboarded</button>
+            <button onclick="toggleRetentionMode('install')" id="btn-ret-install" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${retentionChartMode === "install" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-700"}">Vs Install</button>
+            <button onclick="toggleRetentionMode('onboard')" id="btn-ret-onboard" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${retentionChartMode === "onboard" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-700"}">Vs Onboarded</button>
           </div>
           <div class="relative group">
             <button class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all flex items-center justify-center"><i class="fas fa-info-circle"></i></button>
@@ -803,97 +1002,90 @@ function updateDashboardUI(data) {
     "retention-cards-container",
   );
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}m ${s}s`;
-  };
-
-  const tailwindColors = {
-    blue: { hex: "#3b82f6", glass: "rgba(59, 130, 246, 0.12)" },
-    orange: { hex: "#f97316", glass: "rgba(249, 115, 22, 0.12)" },
-    emerald: { hex: "#10b981", glass: "rgba(16, 185, 129, 0.12)" },
-    violet: { hex: "#8b5cf6", glass: "rgba(139, 92, 246, 0.12)" },
-    indigo: { hex: "#6366f1", glass: "rgba(99, 102, 241, 0.12)" },
-    rose: { hex: "#f43f5e", glass: "rgba(244, 63, 94, 0.12)" },
-  };
-
-  const generateCard = (c, i) => `
-    <div class="premium-card p-7 group" style="--card-color: ${tailwindColors[c.color].hex}; --card-tint: ${tailwindColors[c.color].glass}; animation-delay: ${i * 60}ms">
-      <div class="flex justify-between items-center mb-10">
-        <div class="card-icon-container w-14 h-14 bg-white text-${c.color}-600 rounded-2xl text-xl shadow-sm border border-slate-50">
-          <i class="fas ${c.icon}"></i>
-        </div>
-        <div class="flex flex-col items-end">
-           <span class="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em]">Data Source</span>
-           <div class="flex items-center gap-1.5 mt-1">
-             <div class="w-1.5 h-1.5 rounded-full bg-${c.color}-500 animate-pulse"></div>
-             <span class="text-[8px] font-bold text-${c.color}-600 uppercase">Synced</span>
-           </div>
-        </div>
-      </div>
-      <p class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-2 group-hover:text-slate-600 transition-colors">${c.label}</p>
-      <div class="flex items-baseline">
-        <h3 class="text-4xl font-extrabold text-slate-800 tracking-tighter">${c.val}</h3>
-      </div>
-    </div>`;
-
   const overviewCards = [
     {
       label: "Total Installs",
       val: data[0].toLocaleString(),
+      rawVal: data[0],
+      index: 0,
       icon: "fa-download",
       color: "blue",
     },
     {
       label: "ROAS",
       val: data[27].toFixed(2) + "%",
-      icon: "fa-funnel-dollar",
+      rawVal: data[27],
+      index: 27,
+      icon: "fa-hand-holding-dollar",
       color: "orange",
     },
     {
       label: "Avg Ad per User",
       val: data[12].toFixed(2),
-      icon: "fa-rectangle-ad",
+      rawVal: data[12],
+      index: 12,
+      icon: "fa-video relative ad-text-icon",
       color: "emerald",
     },
     {
       label: "Install to Onboard %",
       val: data[20].toFixed(2) + "%",
-      icon: "fa-rocket",
+      rawVal: data[20],
+      index: 20,
+      icon: `<svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.25em; height: 1.25em;"><path d="M4.5 3.5C3.5 3.5 2.5 4.3 2.5 5.3v13.4c0 1 1 1.8 2 1.8l7.5 1.7c.8.2 1.5-.4 1.5-1.2V3c0-.8-.7-1.4-1.5-1.2L4.5 3.5z"/><circle cx="9.5" cy="12" r="1.3" fill="white"/><path d="M23.5 10.5h-5.5v-2.5l-4 4 4 4v-2.5h5.5v-3z"/><path d="M15 2v2h4c.6 0 1 .4 1 1v14c0 .6-.4 1-1 1h-4v2h4c1.7 0 3-1.3 3-3V5c0-1.7-1.3-3-3-3h-4z"/></svg>`,
       color: "violet",
     },
     {
-      label: "D1 Retention",
+      label: "Day 1 Retention",
       val: data[23].toFixed(2) + "%",
-      icon: "fa-calendar-check",
+      rawVal: data[23],
+      index: 23,
+      icon: "fa-calendar relative d1-text-icon",
       color: "indigo",
     },
     {
       label: "Avg Playtime",
       val: formatTime(data[22]),
-      icon: "fa-stopwatch-20",
+      rawVal: data[22],
+      index: 22,
+      icon: "fa-bolt",
       color: "rose",
     },
   ];
 
+  const isInstall = retentionChartMode === "install";
   const retentionCards = [
+    isInstall
+      ? {
+          label: "Total Installs",
+          val: data[0].toLocaleString(),
+          rawVal: data[0],
+          index: 0,
+          icon: "fa-download",
+          color: "blue",
+        }
+      : {
+          label: "Onboarded Users",
+          val: data[13].toLocaleString(),
+          rawVal: data[13],
+          index: 13,
+          icon: `<svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.25em; height: 1.25em;"><path d="M4.5 3.5C3.5 3.5 2.5 4.3 2.5 5.3v13.4c0 1 1 1.8 2 1.8l7.5 1.7c.8.2 1.5-.4 1.5-1.2V3c0-.8-.7-1.4-1.5-1.2L4.5 3.5z"/><circle cx="9.5" cy="12" r="1.3" fill="white"/><path d="M23.5 10.5h-5.5v-2.5l-4 4 4 4v-2.5h5.5v-3z"/><path d="M15 2v2h4c.6 0 1 .4 1 1v14c0 .6-.4 1-1 1h-4v2h4c1.7 0 3-1.3 3-3V5c0-1.7-1.3-3-3-3h-4z"/></svg>`,
+          color: "violet",
+        },
     {
-      label: "Onboarded Users",
-      val: data[13].toLocaleString(),
-      icon: "fa-user-plus",
-      color: "violet",
-    },
-    {
-      label: "D1 Retention",
+      label: "Day 1 Retention",
       val: data[23].toFixed(2) + "%",
-      icon: "fa-calendar-day",
+      rawVal: data[23],
+      index: 23,
+      icon: "fa-calendar relative d1-text-icon",
       color: "indigo",
     },
     {
-      label: "D3 Retention",
+      label: "Day 3 Retention",
       val: data[24].toFixed(2) + "%",
-      icon: "fa-calendar-week",
+      rawVal: data[24],
+      index: 24,
+      icon: "fa-calendar relative d3-text-icon",
       color: "blue",
     },
   ];
@@ -902,26 +1094,36 @@ function updateDashboardUI(data) {
     {
       label: "ROAS",
       val: data[27].toFixed(2) + "%",
-      icon: "fa-funnel-dollar",
+      rawVal: data[27],
+      index: 27,
+      icon: "fa-hand-holding-dollar",
       color: "orange",
     },
     {
       label: "Avg Ad per User",
       val: data[12].toFixed(2),
-      icon: "fa-rectangle-ad",
+      rawVal: data[12],
+      index: 12,
+      icon: "fa-video relative ad-text-icon",
       color: "emerald",
     },
     {
       label: "User Ad Failure Rate",
       val: data[25].toFixed(2) + "%",
+      rawVal: data[25],
+      index: 25,
       icon: "fa-user-slash",
       color: "rose",
+      invertDelta: true,
     },
     {
       label: "Ad Request Failure %",
       val: data[26].toFixed(2) + "%",
-      icon: "fa-triangle-exclamation",
+      rawVal: data[26],
+      index: 26,
+      icon: "fa-video-slash relative ad-text-icon",
       color: "orange",
+      invertDelta: true,
     },
   ];
 
@@ -929,34 +1131,43 @@ function updateDashboardUI(data) {
     {
       label: "Onboarded Users",
       val: data[13].toLocaleString(),
-      icon: "fa-users-gear",
+      rawVal: data[13],
+      index: 13,
+      icon: `<svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.25em; height: 1.25em;"><path d="M4.5 3.5C3.5 3.5 2.5 4.3 2.5 5.3v13.4c0 1 1 1.8 2 1.8l7.5 1.7c.8.2 1.5-.4 1.5-1.2V3c0-.8-.7-1.4-1.5-1.2L4.5 3.5z"/><circle cx="9.5" cy="12" r="1.3" fill="white"/><path d="M23.5 10.5h-5.5v-2.5l-4 4 4 4v-2.5h5.5v-3z"/><path d="M15 2v2h4c.6 0 1 .4 1 1v14c0 .6-.4 1-1 1h-4v2h4c1.7 0 3-1.3 3-3V5c0-1.7-1.3-3-3-3h-4z"/></svg>`,
       color: "violet",
     },
     {
       label: "Avg. Session Length",
-      val: data[21].toFixed(0) + " sec",
-      icon: "fa-stopwatch",
+      val: formatTime(data[21]),
+      rawVal: data[21],
+      index: 21,
+      icon: "fa-clock",
       color: "blue",
     },
     {
       label: "Avg. Playtime",
-      val: data[22].toFixed(0) + " sec",
+      val: formatTime(data[22]),
+      rawVal: data[22],
+      index: 22,
       icon: "fa-bolt",
       color: "rose",
     },
   ];
-
   overviewContainer.innerHTML = overviewCards
-    .map((c, i) => generateCard(c, i))
+    .map((c, i) => generateOverviewCard(c, i, compLayers))
     .join("");
   retentionContainer.innerHTML = retentionCards
-    .map((c, i) => generateCard(c, i))
+    .map((c, i) =>
+      generateOverviewCard(c, i, compLayers, i === 0 ? "dynamic-ret-card" : ""),
+    )
     .join("");
   document.getElementById("ad-cards-container").innerHTML = adCards
-    .map((c, i) => generateCard(c, i))
+    .map((c, i) => generateOverviewCard(c, i, compLayers))
     .join("");
   document.getElementById("performance-cards-container").innerHTML =
-    performanceCards.map((c, i) => generateCard(c, i)).join("");
+    performanceCards
+      .map((c, i) => generateOverviewCard(c, i, compLayers))
+      .join("");
 
   const activeTab = document.querySelector(".tab-btn.active").dataset.tab;
   switchTab(activeTab);
@@ -970,7 +1181,6 @@ function renderDatasetTable() {
   const formatNum = (val) => val.toLocaleString();
   const formatPct = (val) => val.toFixed(2) + "%";
   const formatDec = (val) => val.toFixed(2);
-  const formatSec = (val) => val.toFixed(1);
 
   const tailwindColors = {
     blue: { hex: "#3b82f6", glass: "rgba(59, 130, 246, 0.08)" },
@@ -986,82 +1196,185 @@ function renderDatasetTable() {
       icon: "fa-rocket",
       color: "blue",
       metrics: [
-        { label: "Total Installs", val: formatNum(lastData[0]) },
-        { label: "Install to Onboard %", val: formatPct(lastData[20]) },
+        { label: "Total Installs", idx: 0, fmt: formatNum },
+        { label: "Install to Onboard %", idx: 20, fmt: formatPct },
       ],
     },
     {
       title: "Level Progression",
-      icon: "fa-stairs",
+      icon: "fa-arrow-down-wide-short",
       color: "violet",
       metrics: [
-        { label: "Lvl 20 Reach %", val: formatPct(lastData[1]) },
-        { label: "Lvl 50 Reach %", val: formatPct(lastData[2]) },
-        { label: "Lvl 70 Reach %", val: formatPct(lastData[3]) },
-        { label: "Lvl 100 Reach %", val: formatPct(lastData[4]) },
-        { label: "Lvl 150 Reach %", val: formatPct(lastData[5]) },
-        { label: "Lvl 200 Reach %", val: formatPct(lastData[6]) },
+        { label: "Lvl 20 Reach %", idx: 1, fmt: formatPct },
+        { label: "Lvl 50 Reach %", idx: 2, fmt: formatPct },
+        { label: "Lvl 70 Reach %", idx: 3, fmt: formatPct },
+        { label: "Lvl 100 Reach %", idx: 4, fmt: formatPct },
+        { label: "Lvl 150 Reach %", idx: 5, fmt: formatPct },
+        { label: "Lvl 200 Reach %", idx: 6, fmt: formatPct },
       ],
     },
     {
-      title: "Monetization Systems",
-      icon: "fa-rectangle-ad",
+      title: "Monetization Systems (IS+RV)",
+      icon: "fa-video relative ad-text-icon",
       color: "emerald",
       metrics: [
-        { label: "Ads 10 Reach %", val: formatPct(lastData[7]) },
-        { label: "Ads 20 Reach %", val: formatPct(lastData[8]) },
-        { label: "Ads 40 Reach %", val: formatPct(lastData[9]) },
-        { label: "Ads 70 Reach %", val: formatPct(lastData[10]) },
-        { label: "Ads 100 Reach %", val: formatPct(lastData[11]) },
-        { label: "Avg Ad per user", val: formatDec(lastData[12]) },
-        { label: "User Ad Failure Rate", val: formatPct(lastData[25]) },
-        { label: "Ad Request Failure %", val: formatPct(lastData[26]) },
+        { label: "Ads 10 Reach %", idx: 7, fmt: formatPct },
+        { label: "Ads 20 Reach %", idx: 8, fmt: formatPct },
+        { label: "Ads 40 Reach %", idx: 9, fmt: formatPct },
+        { label: "Ads 70 Reach %", idx: 10, fmt: formatPct },
+        { label: "Ads 100 Reach %", idx: 11, fmt: formatPct },
+        { label: "Avg Ad per user", idx: 12, fmt: formatDec },
+        {
+          label: "User Ad Failure Rate",
+          idx: 25,
+          fmt: formatPct,
+          invert: true,
+        },
+        {
+          label: "Ad Request Failure %",
+          idx: 26,
+          fmt: formatPct,
+          invert: true,
+        },
       ],
     },
     {
       title: "Engagement & Quality",
-      icon: "fa-stopwatch",
+      icon: "fa-heart",
       color: "rose",
       metrics: [
-        { label: "Avg. Session Length (sec)", val: formatSec(lastData[21]) },
-        { label: "Avg. Playtime (sec)", val: formatSec(lastData[22]) },
-        { label: "D1 Retention", val: formatPct(lastData[23]) },
-        { label: "D3 Retention", val: formatPct(lastData[24]) },
+        { label: "Avg. Session Length", idx: 21, fmt: formatTime },
+        { label: "Avg. Playtime", idx: 22, fmt: formatTime },
+        { label: "Day 1 Retention", idx: 23, fmt: formatPct },
+        { label: "Day 3 Retention", idx: 24, fmt: formatPct },
       ],
     },
     {
       title: "Revenue Health",
-      icon: "fa-funnel-dollar",
+      icon: "fa-hand-holding-dollar",
       color: "orange",
-      metrics: [{ label: "ROAS", val: formatPct(lastData[27]) }],
+      metrics: [{ label: "ROAS", idx: 27, fmt: formatPct }],
     },
   ];
 
+  const isCompare =
+    dashboardMode === "compare" && lastCompLayers && lastCompLayers.length > 0;
+  const slotLetters = ["B", "C", "D"];
+
+  container.className = "columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6";
+
   container.innerHTML = categories
-    .map(
-      (cat, i) => `
-    <div class="premium-card p-6 break-inside-avoid mb-6" style="--card-color: ${tailwindColors[cat.color].hex}; --card-tint: ${tailwindColors[cat.color].glass}; animation: slideUpRow 0.4s ease-out forwards; animation-delay: ${i * 80}ms; opacity: 0;">
-      <div class="flex items-center gap-4 mb-5 pb-4 border-b border-slate-100/50">
-        <div class="dataset-icon-container w-10 h-10 rounded-[10px] bg-white border border-slate-100 shadow-sm flex items-center justify-center" style="color: var(--card-color)">
-          <i class="fas ${cat.icon} text-base"></i>
-        </div>
-        <h5 class="text-[11px] font-black text-slate-800 uppercase tracking-[0.15em]">${cat.title}</h5>
-      </div>
-      <div class="space-y-1">
-        ${cat.metrics
-          .map(
-            (m) => `
-          <div class="flex justify-between items-center px-1 py-2 rounded-lg hover:bg-slate-50/50 transition-colors group">
-            <span class="text-[11px] font-bold text-slate-500 group-hover:text-slate-800 transition-colors">${m.label}</span>
-            <span class="text-[12px] font-black text-slate-800 tabular-nums bg-white border border-slate-100/60 shadow-sm px-2.5 py-1 rounded-md group-hover:border-slate-300 transition-colors">${m.val}</span>
+    .map((cat, i) => {
+      let headersHTML = "";
+      if (isCompare) {
+        headersHTML = `
+            <div class="flex justify-between items-center px-2 py-2 border-b border-slate-200/80 mb-2 bg-slate-50 rounded-t-lg">
+              <span class="w-[30%] text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">KPI</span>
+              <div class="flex-1 flex items-center">
+                <span class="flex-1 text-center text-[9px] font-black text-slate-400 tracking-widest leading-[1.1]">${getLayerLabel(0)}</span>
+                      ${lastCompLayers.map((_, idx) => `<span class="flex-1 text-center text-[9px] font-black text-slate-400 tracking-widest border-l border-slate-200/60 leading-[1.1]">${getLayerLabel(idx + 1)}</span>`).join("")}
+              </div>
+            </div>
+          `;
+      }
+
+      const metricsHTML = cat.metrics
+        .map((m, mIdx) => {
+          const baseRaw = lastData[m.idx];
+          const baseFormatted = m.fmt(baseRaw);
+
+          if (!isCompare) {
+            return `
+              <div class="flex justify-between items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group animate-slide-up" style="animation-fill-mode: both; animation-delay: ${150 + mIdx * 60}ms">
+                <span class="text-[11px] font-bold text-slate-500 group-hover:text-slate-800 transition-colors">${m.label}</span>
+                <span class="text-[12px] font-black text-slate-800 tabular-nums bg-white border border-slate-200/80 shadow-sm px-2.5 py-1 rounded-md transition-colors">${baseFormatted}</span>
+              </div>
+            `;
+          } else {
+            let compValsHTML = lastCompLayers
+              .map((layer) => {
+                const compRaw = layer.data[m.idx];
+                const compVal = m.fmt(compRaw);
+
+                const isAbs = [
+                  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20,
+                  23, 24, 25, 26, 27,
+                ].includes(m.idx);
+                let delta = 0;
+                let deltaStr = "";
+
+                if (isAbs) {
+                  delta = compRaw - baseRaw;
+                  deltaStr =
+                    delta > 0
+                      ? `+${delta.toFixed(2)}pp`
+                      : `${delta.toFixed(2)}pp`;
+                } else {
+                  if (baseRaw !== 0) {
+                    delta = ((compRaw - baseRaw) / baseRaw) * 100;
+                  } else if (compRaw > 0) {
+                    delta = 100;
+                  }
+                  deltaStr =
+                    delta > 0
+                      ? `+${delta.toFixed(2)}%`
+                      : `${delta.toFixed(2)}%`;
+                }
+
+                let isPositive = m.invert ? delta <= 0 : delta >= 0;
+
+                const pillClass = isPositive ? "bg-emerald-500" : "bg-rose-500";
+                const arrowClass = isPositive
+                  ? "border-t-emerald-500"
+                  : "border-t-rose-500";
+
+                return `
+                <div class="flex-1 flex justify-center items-center px-1 border-l border-slate-200/60">
+                  <div class="relative w-full max-w-[80px] h-[32px] flex justify-center items-center rounded-lg transition-all duration-200 hover:bg-slate-100 hover:shadow-inner hover:scale-95 cursor-default group/cell">
+                    <span class="text-[11px] font-bold text-slate-700 group-hover/cell:text-slate-900 group-hover/cell:font-black transition-all tabular-nums">${compVal}</span>
+                    
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 opacity-0 group-hover/cell:opacity-100 transition-all duration-200 pointer-events-none z-[100] transform translate-y-2 group-hover/cell:translate-y-0 flex flex-col items-center drop-shadow-lg">
+                       <div class="px-3 py-1.5 rounded-xl text-[12px] font-black text-white ${pillClass} whitespace-nowrap tracking-tight leading-none shadow-sm">${deltaStr}</div>
+                       <div class="w-0 h-0 border-x-[6px] border-x-transparent border-t-[6px] ${arrowClass} -mt-[0.5px]"></div>
+                    </div>
+                  </div>
+                </div>
+              `;
+              })
+              .join("");
+
+            return `
+              <div class="flex justify-between items-center px-2 py-1.5 border-b border-slate-100/50 last:border-0 hover:bg-slate-50 transition-colors group animate-slide-up" style="animation-fill-mode: both; animation-delay: ${150 + mIdx * 60}ms">
+                <span class="w-[30%] text-[11px] font-bold text-slate-500 group-hover:text-slate-800 transition-colors truncate pr-2">${m.label}</span>
+                <div class="flex-1 flex items-center">
+                  <div class="flex-1 flex justify-center items-center px-1">
+                    <div class="relative w-full max-w-[80px] h-[32px] flex justify-center items-center rounded-lg border border-transparent transition-all duration-200 group-hover:bg-white group-hover:border-slate-200/80 group-hover:shadow-sm">
+                      <span class="text-[11px] font-black text-slate-800 tabular-nums">${baseFormatted}</span>
+                    </div>
+                  </div>
+                  ${compValsHTML}
+                </div>
+              </div>
+            `;
+          }
+        })
+        .join("");
+
+      return `
+      <div class="premium-card p-6 break-inside-avoid mb-6" style="--card-color: ${tailwindColors[cat.color].hex}; --card-tint: ${tailwindColors[cat.color].glass}; animation: slideUpRow 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards; animation-delay: ${i * 80}ms; opacity: 0;">
+        <div class="flex items-center gap-4 mb-5 pb-4 border-b border-slate-100/50">
+          <div class="dataset-icon-container w-10 h-10 rounded-[10px] bg-white border border-slate-100 shadow-sm flex items-center justify-center" style="color: var(--card-color)">
+            ${cat.icon.startsWith("<") ? cat.icon : `<i class="fas ${cat.icon} text-base"></i>`}
           </div>
-        `,
-          )
-          .join("")}
+          <h5 class="text-[11px] font-black text-slate-800 uppercase tracking-[0.15em]">${cat.title}</h5>
+        </div>
+        ${headersHTML}
+        <div class="space-y-1">
+          ${metricsHTML}
+        </div>
       </div>
-    </div>
-  `,
-    )
+    `;
+    })
     .join("");
 }
 function toggleRetentionMode(mode) {
@@ -1080,7 +1393,61 @@ function toggleRetentionMode(mode) {
     instBtn.className =
       "px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-slate-500 hover:text-slate-700";
   }
+
   renderRetentionChart();
+  updateDynamicRetentionCard();
+}
+
+function updateDynamicRetentionCard() {
+  const card = document.getElementById("dynamic-ret-card");
+  if (!card || !lastData) return;
+
+  const isInstall = retentionChartMode === "install";
+  const cData = isInstall
+    ? {
+        label: "Total Installs",
+        val: lastData[0].toLocaleString(),
+        rawVal: lastData[0],
+        index: 0,
+        icon: "fa-download",
+        color: "blue",
+      }
+    : {
+        label: "Onboarded Users",
+        val: lastData[13].toLocaleString(),
+        rawVal: lastData[13],
+        index: 13,
+        icon: `<svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.25em; height: 1.25em;"><path d="M4.5 3.5C3.5 3.5 2.5 4.3 2.5 5.3v13.4c0 1 1 1.8 2 1.8l7.5 1.7c.8.2 1.5-.4 1.5-1.2V3c0-.8-.7-1.4-1.5-1.2L4.5 3.5z"/><circle cx="9.5" cy="12" r="1.3" fill="white"/><path d="M23.5 10.5h-5.5v-2.5l-4 4 4 4v-2.5h5.5v-3z"/><path d="M15 2v2h4c.6 0 1 .4 1 1v14c0 .6-.4 1-1 1h-4v2h4c1.7 0 3-1.3 3-3V5c0-1.7-1.3-3-3-3h-4z"/></svg>`,
+        color: "violet",
+      };
+
+  card.style.transition = "opacity 0.2s ease-in-out";
+  card.style.opacity = "0";
+
+  setTimeout(() => {
+    const newHTML = generateOverviewCard(
+      cData,
+      0,
+      lastCompLayers,
+      "dynamic-ret-card",
+    );
+    card.outerHTML = newHTML;
+
+    const newCard = document.getElementById("dynamic-ret-card");
+    if (newCard) {
+      newCard.style.animation = "none";
+      newCard.style.transform = "translateY(0)"; // Locks hover transform anomaly
+      newCard.style.opacity = "0";
+      void newCard.offsetWidth; // Trigger reflow
+      newCard.style.transition = "opacity 0.3s ease-in-out";
+      newCard.style.opacity = "1";
+
+      setTimeout(() => {
+        newCard.style.transition = "";
+        // Keeping transform inline seamlessly prevents the hover popup
+      }, 300);
+    }
+  }, 200);
 }
 
 function renderRetentionChart() {
@@ -1097,77 +1464,127 @@ function renderRetentionChart() {
       <p class="text-slate-300">Tracks retention from the start of Level 1 or 2 (onboarding completion) to each hit point. This measures how well players stay after actually starting the game.</p>`;
   }
 
-  const values =
+  const baseValues =
     retentionChartMode === "install"
       ? lastData.slice(1, 7)
       : lastData.slice(14, 20);
 
   const label =
     retentionChartMode === "install" ? "Reach %" : "Onboard to Lvl %";
-  const themeColor = retentionChartMode === "install" ? "#3b82f6" : "#8b5cf6";
-  const gradientColor =
-    retentionChartMode === "install" ? "59, 130, 246" : "139, 92, 246";
+
+  const isCompare =
+    dashboardMode === "compare" && lastCompLayers && lastCompLayers.length > 0;
+  let datasets = [];
+
+  const layerColors = [
+    { hex: "#83A95C", rgb: "131, 169, 92" },
+    { hex: "#944E6C", rgb: "148, 78, 108" },
+    { hex: "#433D3C", rgb: "67, 61, 60" },
+    { hex: "#3b82f6", rgb: "59, 130, 246" },
+  ];
+
+  const createGradient = (ctx, chartArea, rgb) => {
+    const gradient = ctx.createLinearGradient(
+      0,
+      chartArea.top,
+      0,
+      chartArea.bottom,
+    );
+    gradient.addColorStop(0, `rgba(${rgb}, 0.45)`);
+    gradient.addColorStop(0.5, `rgba(${rgb}, 0.15)`);
+    gradient.addColorStop(1, `rgba(${rgb}, 0.05)`);
+    return gradient;
+  };
+
+  const addLayerDataset = (dataVals, layerIdx, customLabel = null) => {
+    const color = layerColors[layerIdx];
+    datasets.push({
+      label: customLabel || getLayerLabel(layerIdx),
+      data: dataVals,
+      borderColor: color.hex,
+      borderWidth: 3,
+      backgroundColor: (context) => {
+        const chart = context.chart;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return null;
+        return createGradient(ctx, chartArea, color.rgb);
+      },
+      fill: true,
+      tension: 0.45,
+      pointRadius: 5,
+      pointBackgroundColor: color.hex,
+      pointBorderColor: "#fff",
+      pointBorderWidth: 2,
+      pointHoverRadius: 7,
+      pointHoverBackgroundColor: color.hex,
+      pointHoverBorderColor: "#fff",
+      pointHoverBorderWidth: 2.5,
+    });
+  };
+
+  if (!isCompare) {
+    addLayerDataset(baseValues, 0, label);
+  } else {
+    addLayerDataset(baseValues, 0);
+    lastCompLayers.forEach((layer, idx) => {
+      const compValues =
+        retentionChartMode === "install"
+          ? layer.data.slice(1, 7)
+          : layer.data.slice(14, 20);
+      addLayerDataset(compValues, idx + 1);
+    });
+  }
 
   if (charts.funnel) charts.funnel.destroy();
   charts.funnel = new Chart(ctx, {
     type: "line",
     data: {
       labels: ["Lvl 20", "Lvl 50", "Lvl 70", "Lvl 100", "Lvl 150", "Lvl 200"],
-      datasets: [
-        {
-          label: label,
-          data: values,
-          borderColor: themeColor,
-          borderWidth: 3,
-          backgroundColor: (context) => {
-            const chart = context.chart;
-            const { ctx, chartArea } = chart;
-            if (!chartArea) return null;
-            const gradient = ctx.createLinearGradient(
-              0,
-              chartArea.top,
-              0,
-              chartArea.bottom,
-            );
-            gradient.addColorStop(0, `rgba(${gradientColor}, 0.45)`); // Increased visibility
-            gradient.addColorStop(0.5, `rgba(${gradientColor}, 0.15)`);
-            gradient.addColorStop(1, `rgba(${gradientColor}, 0.05)`);
-            return gradient;
-          },
-          fill: true,
-          tension: 0.45,
-          pointRadius: 5, // Brought back circle markers
-          pointBackgroundColor: "#fff",
-          pointBorderColor: themeColor,
-          pointBorderWidth: 2.5,
-          pointHoverRadius: 7,
-          pointHoverBackgroundColor: themeColor,
-          pointHoverBorderColor: "#fff",
-          pointHoverBorderWidth: 2,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
       animation: {
-        duration: 1200, // Slightly longer for more impact
+        duration: 1200,
         easing: "easeOutQuart",
-        delay: 50, // Minimal delay to ensure clean start
+        delay: (context) => context.dataIndex * 50,
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: isCompare,
+          position: "top",
+          align: "end",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8,
+            font: { family: "Outfit", size: 10, weight: "bold" },
+            color: "#64748b",
+          },
+        },
         tooltip: {
           enabled: true,
-          displayColors: false,
+          usePointStyle: true,
+          boxPadding: 4,
+          displayColors: isCompare,
           backgroundColor: "#1e293b",
           padding: 15,
           cornerRadius: 12,
-          titleFont: { size: 0 },
+          titleFont: {
+            family: "Outfit",
+            size: isCompare ? 11 : 0,
+            color: "#94a3b8",
+            weight: "bold",
+          },
           bodyFont: { family: "Outfit", size: 14, weight: "700" },
           callbacks: {
-            title: () => "",
-            label: (ctx) => `${ctx.label}: ${ctx.raw.toFixed(2)}%`,
+            title: (ctxs) => (isCompare ? ctxs[0].label : ""),
+            label: (ctx) =>
+              `${isCompare ? ctx.dataset.label : ctx.label}: ${ctx.raw.toFixed(2)}%`,
           },
         },
       },
@@ -1190,62 +1607,166 @@ function renderRetentionChart() {
   });
 }
 
-function renderAdDepthChart(values) {
+function renderAdDepthChart() {
+  if (!lastData) return;
+  const values = lastData.slice(7, 12);
   const ctx = document.getElementById("adDepthChart").getContext("2d");
   const tableContainer = document.getElementById("ad-depth-table-container");
   const infoContent = document.getElementById("ads-info-content");
   infoContent.innerHTML = `
     <p class="text-emerald-400 font-black uppercase tracking-widest text-[9px] mb-2">Ad Depth Reach</p>
-    <p class="text-slate-300">Shows the % of active users who hit specific ad milestones. Use this to find your "power watchers" and check if ads are balanced.</p>`;
+    <p class="text-slate-300">Shows the % of active users who hit specific ad milestones. Use this to find our "power watchers" and check if ads are balanced.</p>`;
   const labels = ["10 Ads", "20 Ads", "40 Ads", "70 Ads", "100 Ads"];
 
-  // 1. Injected Table first to ensure the flexbox layout is final before drawing the chart
-  tableContainer.innerHTML = `
-    <table class="w-full text-left">
-      <thead>
-        <tr class="border-b border-slate-100">
-          <th class="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Milestone</th>
-          <th class="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">User Reach %</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${labels
-          .map(
-            (label, i) => `
-          <tr class="group hover:bg-emerald-50/50 transition-colors ad-table-row" style="animation-delay: ${200 + i * 80}ms">
-            <td class="px-4 py-3 text-xs font-bold text-slate-600">${label}</td>
-            <td class="px-4 py-3">
-              <div class="flex items-center gap-3">
-                <span class="text-xs font-black text-slate-800">${values[i].toFixed(2)}%</span>
-                <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[60px]">
-                  <div class="h-full bg-emerald-500 rounded-full" style="width: ${values[i]}%"></div>
-                </div>
-              </div>
-            </td>
-          </tr>
-        `,
-          )
-          .join("")}
-      </tbody>
-    </table>
-  `;
+  const isCompare =
+    dashboardMode === "compare" && lastCompLayers && lastCompLayers.length > 0;
 
-  // 2. Initialize Chart with corrected staggered animation delay
+  let tableHTML = "";
+  let datasets = [];
+
+  const palette = [
+    { bg: "#84B179", hover: "#709c66", text: "text-white" },
+    { bg: "#A2CB8B", hover: "#8bb574", text: "text-slate-900" },
+    { bg: "#C7EABB", hover: "#b0d6a3", text: "text-slate-900" },
+    { bg: "#E8F5BD", hover: "#d1e0a6", text: "text-slate-900" },
+  ];
+
+  if (!isCompare) {
+    tableHTML = `
+      <table class="w-full text-left">
+        <thead>
+          <tr class="border-b border-slate-100">
+            <th class="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Milestone</th>
+            <th class="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">User Reach %</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${labels
+            .map(
+              (label, i) => `
+            <tr class="group hover:bg-slate-50 transition-colors animate-slide-up" style="animation-fill-mode: both; animation-delay: ${150 + i * 80}ms">
+              <td class="px-4 py-3 text-xs font-bold text-slate-600">${label}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-black text-slate-800">${values[i].toFixed(2)}%</span>
+                  <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[60px]">
+                    <div class="h-full rounded-full" style="width: ${values[i]}%; background-color: ${palette[0].bg};"></div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    datasets.push({
+      label: "Reach %",
+      data: values,
+      backgroundColor: palette[0].bg,
+      hoverBackgroundColor: palette[0].hover,
+      borderRadius: 10,
+      barThickness: 45,
+      borderWidth: 0,
+    });
+  } else {
+    const headers = [
+      "Milestone",
+      getLayerLabel(0),
+      ...lastCompLayers.map((_, i) => getLayerLabel(i + 1)),
+    ];
+
+    let rowsHTML = labels
+      .map((label, idx) => {
+        const baseVal = values[idx];
+
+        let rowCols = `<td class="px-4 py-3 text-xs font-bold text-slate-500 border-b border-slate-100/50 sticky left-0 bg-white group-hover:bg-slate-50 group-hover:text-slate-900 transition-colors z-10">${label}</td>`;
+
+        rowCols += `<td class="px-2 py-1.5 border-b border-l border-slate-100/50 text-center bg-slate-50/30">
+          <div class="relative w-full h-full flex justify-center items-center py-2.5 rounded-xl transition-all duration-200 group-hover:bg-white">
+            <span class="text-xs font-black text-slate-800">${baseVal.toFixed(2)}%</span>
+          </div>
+        </td>`;
+
+        lastCompLayers.forEach((layer, lIdx) => {
+          const compVal = layer.data[7 + idx];
+          let delta = compVal - baseVal;
+          const deltaStr =
+            delta > 0 ? `+${delta.toFixed(2)}pp` : `${delta.toFixed(2)}pp`;
+
+          const pillClass = delta >= 0 ? "bg-emerald-500" : "bg-rose-500";
+          const arrowClass =
+            delta >= 0 ? "border-t-emerald-500" : "border-t-rose-500";
+
+          rowCols += `
+          <td class="px-2 py-1.5 border-b border-l border-slate-100/50 min-w-[90px] text-center">
+            <div class="relative w-full h-full flex justify-center items-center py-2.5 rounded-xl transition-all duration-200 hover:bg-slate-100 hover:shadow-inner hover:scale-95 cursor-default group/cell">
+              <span class="text-xs font-bold text-slate-700 group-hover/cell:text-slate-900 group-hover/cell:font-black transition-all">${compVal.toFixed(2)}%</span>
+              
+              <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 opacity-0 group-hover/cell:opacity-100 transition-all duration-200 pointer-events-none z-[100] transform translate-y-2 group-hover/cell:translate-y-0 flex flex-col items-center drop-shadow-lg">
+                 <div class="px-4 py-2 rounded-xl text-[13px] font-black text-white ${pillClass} whitespace-nowrap tracking-tight leading-none shadow-sm">${deltaStr} <span class="font-bold opacity-90 text-[10px] ml-0.5"></span></div>
+                 <div class="w-0 h-0 border-x-[8px] border-x-transparent border-t-[8px] ${arrowClass} -mt-[0.5px]"></div>
+              </div>
+            </div>
+          </td>`;
+        });
+
+        return `<tr class="animate-slide-up group" style="animation-fill-mode: both; animation-delay: ${150 + idx * 80}ms">${rowCols}</tr>`;
+      })
+      .join("");
+
+    tableHTML = `
+      <div class="overflow-x-auto custom-scrollbar pb-6 rounded-xl pt-12 -mt-12">
+        <table class="w-full text-left whitespace-nowrap border-separate border-spacing-0">
+          <thead>
+            <tr>
+              ${headers
+                .map((h, i) => {
+                  if (i === 0)
+                    return `<th class="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100/50 sticky left-0 bg-white z-20">${h}</th>`;
+                  return `<th class="px-4 py-3 text-[9px] font-black tracking-widest border-b border-l border-slate-100/50 text-center ${palette[i - 1].text}" style="background-color: ${palette[i - 1].bg};">${h}</th>`;
+                })
+                .join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHTML}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    datasets.push({
+      label: getLayerLabel(0),
+      data: values,
+      backgroundColor: palette[0].bg,
+      hoverBackgroundColor: palette[0].hover,
+      borderRadius: 6,
+      borderWidth: 0,
+    });
+
+    lastCompLayers.forEach((layer, i) => {
+      datasets.push({
+        label: getLayerLabel(i + 1),
+        data: layer.data.slice(7, 12),
+        backgroundColor: palette[i + 1].bg,
+        hoverBackgroundColor: palette[i + 1].hover,
+        borderWidth: 0,
+        borderRadius: 6,
+      });
+    });
+  }
+
+  tableContainer.innerHTML = tableHTML;
+
   if (charts.ads) charts.ads.destroy();
   charts.ads = new Chart(ctx, {
     type: "bar",
     data: {
       labels: labels,
-      datasets: [
-        {
-          data: values,
-          backgroundColor: "rgba(16, 185, 129, 0.7)",
-          hoverBackgroundColor: "#10b981",
-          borderRadius: 10,
-          barThickness: 45,
-          borderWidth: 0,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -1253,22 +1774,37 @@ function renderAdDepthChart(values) {
       animation: {
         duration: 1200,
         easing: "easeOutQuart",
-        // dataIndex is the correct property for staggered bar animations in Chart.js
-        delay: (context) => context.dataIndex * 150,
+        delay: (context) => context.dataIndex * 100,
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: isCompare,
+          position: "top",
+          align: "end",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8,
+            font: { family: "Outfit", size: 10, weight: "bold" },
+            color: "#64748b",
+          },
+        },
         tooltip: {
           enabled: true,
-          displayColors: false,
+          displayColors: isCompare,
           backgroundColor: "#1e293b",
           padding: 15,
           cornerRadius: 12,
-          titleFont: { size: 0 },
+          titleFont: {
+            family: "Outfit",
+            size: isCompare ? 11 : 0,
+            color: "#94a3b8",
+            weight: "bold",
+          },
           bodyFont: { family: "Outfit", size: 14, weight: "700" },
           callbacks: {
-            title: () => "",
-            label: (ctx) => `${ctx.label}: ${ctx.raw.toFixed(2)}%`,
+            title: (ctxs) => (isCompare ? ctxs[0].label : ""),
+            label: (ctx) =>
+              `${isCompare ? ctx.dataset.label : ctx.label}: ${ctx.raw.toFixed(2)}%`,
           },
         },
       },
@@ -1277,13 +1813,13 @@ function renderAdDepthChart(values) {
           beginAtZero: true,
           grid: { color: "rgba(0,0,0,0.02)" },
           ticks: {
-            font: { size: 10, weight: "bold" },
+            font: { family: "Outfit", size: 10, weight: "bold" },
             callback: (v) => v + "%",
           },
         },
         x: {
           grid: { display: false },
-          ticks: { font: { size: 10, weight: "bold" } },
+          ticks: { font: { family: "Outfit", size: 10, weight: "bold" } },
         },
       },
     },
@@ -1314,106 +1850,210 @@ function renderFrictionChart() {
   const ctx = document.getElementById("frictionChart").getContext("2d");
   const infoContent = document.getElementById("perf-info-content");
   const legendContainer = document.getElementById("perf-legend-container");
-  const reach = lastData.slice(14, 20);
+
+  const labels = [
+    "Onboard-Lvl 20",
+    "Lvl 20-50",
+    "Lvl 50-70",
+    "Lvl 70-100",
+    "Lvl 100-150",
+    "Lvl 150-200",
+  ];
   const gaps = [20, 30, 20, 30, 50, 50];
 
-  // 1. Friction Drop (Raw User Loss)
-  const frictionDrop = [
-    reach[0],
-    ((reach[0] - reach[1]) / reach[0]) * 100,
-    ((reach[1] - reach[2]) / reach[1]) * 100,
-    ((reach[2] - reach[3]) / reach[2]) * 100,
-    ((reach[3] - reach[4]) / reach[3]) * 100,
-    ((reach[4] - reach[5]) / reach[4]) * 100,
-  ];
+  const isCompare =
+    dashboardMode === "compare" && lastCompLayers && lastCompLayers.length > 0;
 
-  // 2. Efficiency (Performance Index)
-  const piData = frictionDrop.map((val, i) => Math.pow(val / 100, 1 / gaps[i]));
+  const calcData = (rawData) => {
+    const reach = rawData.slice(14, 20);
+    const frictionDrop = [
+      reach[0],
+      ((reach[0] - reach[1]) / reach[0]) * 100,
+      ((reach[1] - reach[2]) / reach[1]) * 100,
+      ((reach[2] - reach[3]) / reach[2]) * 100,
+      ((reach[3] - reach[4]) / reach[3]) * 100,
+      ((reach[4] - reach[5]) / reach[4]) * 100,
+    ];
+    const safeFrictionDrop = frictionDrop.map((v) =>
+      isNaN(v) || !isFinite(v) ? 0 : v,
+    );
+    const piData = safeFrictionDrop.map((val, i) =>
+      Math.pow(Math.max(0, val) / 100, 1 / gaps[i]),
+    );
+    return { frictionDrop: safeFrictionDrop, piData };
+  };
 
-  if (charts.friction) charts.friction.destroy();
+  const baseCalc = calcData(lastData);
+  let datasets = [];
+  let tooltipLabel, yAxisLabel;
 
-  let chartData, barColors, tooltipLabel, yAxisLabel, showLine;
+  const colorMap = {
+    0: "#35d05e", // high (max)
+    1: "#7ce09a", // high (low)
+    2: "#98a6ae", // mid (high)
+    3: "#b9d5e6", // mid (low)
+    4: "#ffa1a9", // low (low)
+    5: "#ff3f42", // low (max)
+  };
 
-  if (performanceMode === "impact") {
-    chartData = frictionDrop;
-    // Red Gradient style for Impact
-    const redGradient = ctx.createLinearGradient(0, 0, 0, 400);
-    redGradient.addColorStop(0, "#f87171");
-    redGradient.addColorStop(1, "#ef4444");
-    barColors = redGradient;
-    tooltipLabel = "Friction Drop";
-    yAxisLabel = (v) => v + "%";
-    showLine = true;
-
-    infoContent.innerHTML = `
-      <p class="text-blue-400 font-black uppercase tracking-widest text-[9px] mb-2">Friction Drop</p>
-      <p class="text-slate-300">Shows exactly where the highest number of players are leaving the game.</p>`;
-    legendContainer.innerHTML = ""; // No legend needed for uniform view
-  } else {
-    chartData = piData;
-    // 6 Hex Hardcoded Scale for Efficiency
+  const getEfficiencyColors = (piData, layerIndex) => {
     const rankedIndices = piData
       .map((val, idx) => ({ val, idx }))
       .sort((a, b) => b.val - a.val)
       .map((item) => item.idx);
-    const colorMap = {
-      0: "#63be7b",
-      1: "#a8dab7",
-      2: "#afb6bb",
-      3: "#dfe8ee",
-      4: "#facfd2",
-      5: "#f8696b",
-    };
-    barColors = new Array(6);
+
+    let colors = new Array(6);
+    const alpha = 1 - layerIndex * 0.15; // Layer variants: 100%, 85%, 70%, 55%
+
     rankedIndices.forEach((originalIdx, rank) => {
-      barColors[originalIdx] = colorMap[rank];
+      const hex = colorMap[rank];
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      colors[originalIdx] = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    });
+    return colors;
+  };
+
+  infoContent.innerHTML =
+    performanceMode === "impact"
+      ? `<p class="text-rose-400 font-black uppercase tracking-widest text-[9px] mb-2">Friction Drop</p><p class="text-slate-300">Shows exactly where the highest number of players are leaving the game.</p>`
+      : `<p class="text-emerald-400 font-black uppercase tracking-widest text-[9px] mb-2">Group Performance</p><p class="text-slate-300">Highlights which level groups are actually the most difficult for players.</p>`;
+
+  legendContainer.innerHTML =
+    performanceMode === "efficiency"
+      ? `
+    <div class="flex items-center gap-8 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-4">
+      <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#35d05e]"></div> Best</div>
+      <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#98a6ae]"></div> Moderate</div>
+      <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#ff3f42]"></div> Worst</div>
+    </div>`
+      : "";
+
+  if (!isCompare) {
+    if (performanceMode === "impact") {
+      const redGradient = ctx.createLinearGradient(0, 0, 0, 400);
+      redGradient.addColorStop(0, "#f87171");
+      redGradient.addColorStop(1, "#ef4444");
+
+      datasets.push({
+        type: "line",
+        data: baseCalc.frictionDrop,
+        borderColor: "#262626",
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.4,
+        fill: false,
+        order: 1,
+      });
+
+      datasets.push({
+        type: "bar",
+        data: baseCalc.frictionDrop,
+        backgroundColor: redGradient,
+        borderRadius: 8,
+        barThickness: 55,
+        order: 2,
+      });
+
+      tooltipLabel = "Friction Drop";
+      yAxisLabel = (v) => v + "%";
+    } else {
+      datasets.push({
+        type: "bar",
+        data: baseCalc.piData,
+        backgroundColor: getEfficiencyColors(baseCalc.piData, 0),
+        borderRadius: 8,
+        barThickness: 55,
+        order: 2,
+      });
+
+      tooltipLabel = "Efficiency Index";
+      yAxisLabel = (v) => v.toFixed(3);
+    }
+  } else {
+    const slotLetters = ["B", "C", "D"];
+    const redPalette = ["#D96C6C", "#E68A8A", "#F2ABAB", "#FAD4D4"]; // Vibrant equivalent to the green palette
+
+    tooltipLabel =
+      performanceMode === "impact" ? "Friction Drop" : "Efficiency Index";
+    yAxisLabel =
+      performanceMode === "impact" ? (v) => v + "%" : (v) => v.toFixed(3);
+
+    datasets.push({
+      label: getLayerLabel(0),
+      type: "bar",
+      data:
+        performanceMode === "impact" ? baseCalc.frictionDrop : baseCalc.piData,
+      backgroundColor:
+        performanceMode === "impact"
+          ? redPalette[0]
+          : getEfficiencyColors(baseCalc.piData, 0),
+      borderRadius: 6,
+      borderWidth: 0,
     });
 
-    tooltipLabel = "Efficiency Index";
-    yAxisLabel = (v) => v.toFixed(3);
-    showLine = false;
-
-    infoContent.innerHTML = `
-      <p class="text-emerald-400 font-black uppercase tracking-widest text-[9px] mb-2">Group Performance</p>
-      <p class="text-slate-300">Highlights which level groups are actually the most difficult for players, regardless of how many levels are in the group.</p>`;
-    legendContainer.innerHTML = `
-      <div class="flex items-center gap-8 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-4">
-        <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#63be7b]"></div> Best</div>
-        <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#afb6bb]"></div> Moderate</div>
-        <div class="flex items-center gap-2.5"><div class="w-2.5 h-2.5 rounded bg-[#f8696b]"></div> Worst</div>
-      </div>`;
+    lastCompLayers.forEach((layer, i) => {
+      const compCalc = calcData(layer.data);
+      datasets.push({
+        label: getLayerLabel(i + 1),
+        type: "bar",
+        data:
+          performanceMode === "impact"
+            ? compCalc.frictionDrop
+            : compCalc.piData,
+        backgroundColor:
+          performanceMode === "impact"
+            ? redPalette[i + 1]
+            : getEfficiencyColors(compCalc.piData, i + 1),
+        borderRadius: 6,
+        borderWidth: 0,
+      });
+    });
   }
 
+  if (charts.friction) charts.friction.destroy();
+
+  const barLabelsPlugin = {
+    id: "barLabels",
+    afterDatasetsDraw(chart) {
+      if (!isCompare) return;
+      const { ctx } = chart;
+
+      chart.data.datasets.forEach((dataset, i) => {
+        const meta = chart.getDatasetMeta(i);
+        if (meta.hidden || dataset.type !== "bar") return;
+
+        const letter = isCompare
+          ? getLayerLabel(i).split(" ")[0]
+          : ["A", "B", "C", "D"][i];
+
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.font = "900 10px Outfit";
+
+        meta.data.forEach((bar) => {
+          let yPos = bar.y - 6;
+          ctx.fillStyle = "#94a3b8"; // slate-400
+
+          if (yPos < 20) {
+            yPos = bar.y + 16;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+          }
+
+          ctx.fillText(letter, bar.x, yPos);
+        });
+        ctx.restore();
+      });
+    },
+  };
+
   charts.friction = new Chart(ctx, {
+    plugins: [barLabelsPlugin],
     data: {
-      labels: [
-        "Onboard-Lvl 20",
-        "Lvl 20-50",
-        "Lvl 50-70",
-        "Lvl 70-100",
-        "Lvl 100-150",
-        "Lvl 150-200",
-      ],
-      datasets: [
-        {
-          type: "line",
-          data: showLine ? chartData : [],
-          borderColor: "#262626",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.4,
-          fill: false,
-          order: 1,
-        },
-        {
-          type: "bar",
-          data: chartData,
-          backgroundColor: barColors,
-          borderRadius: 8,
-          barThickness: 55,
-          order: 2,
-        },
-      ],
+      labels: labels,
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -1421,29 +2061,51 @@ function renderFrictionChart() {
       animation: {
         duration: 1000,
         easing: "easeOutQuart",
-        delay: (context) => context.dataIndex * 100, // Staggered "rising" effect for bars
+        delay: (context) => context.dataIndex * (isCompare ? 50 : 100),
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: isCompare,
+          position: "top",
+          align: "end",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8,
+            font: { family: "Outfit", size: 10, weight: "bold" },
+            color: "#64748b",
+          },
+        },
         tooltip: {
           enabled: true,
-          displayColors: false,
+          displayColors: isCompare,
           backgroundColor: "#1e293b",
           padding: 15,
           cornerRadius: 12,
-          titleFont: { size: 0 },
+          titleFont: {
+            family: "Outfit",
+            size: isCompare ? 11 : 0,
+            color: "#94a3b8",
+            weight: "bold",
+          },
           bodyFont: { family: "Outfit", size: 14, weight: "700" },
           callbacks: {
-            title: () => "",
-            label: (ctx) =>
-              `${tooltipLabel}: ${performanceMode === "impact" ? ctx.raw.toFixed(2) + "%" : ctx.raw.toFixed(3)}`,
+            title: (ctxs) => (isCompare ? ctxs[0].label : ""),
+            label: (ctx) => {
+              const val =
+                performanceMode === "impact"
+                  ? ctx.raw.toFixed(2) + "%"
+                  : ctx.raw.toFixed(3);
+              return isCompare
+                ? `${ctx.dataset.label}: ${val}`
+                : `${tooltipLabel}: ${val}`;
+            },
           },
         },
       },
       scales: {
         y: {
           beginAtZero: performanceMode === "impact",
-          min: performanceMode === "efficiency" ? 0.9 : undefined, // Zoom in for PI to show differences
+          min: performanceMode === "efficiency" && !isCompare ? 0.9 : undefined,
           grid: { color: "rgba(0,0,0,0.02)" },
           ticks: {
             font: { family: "Outfit", weight: "600" },
